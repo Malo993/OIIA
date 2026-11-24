@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OIIA</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        body { background-color: #212121; color: #ececec; height: 100vh; display: flex; overflow: hidden; }
+
+        /* BARRE LATÉRALE GAUCHE (Admin) */
+        #sidebar {
+            width: 280px; background: #171717; border-right: 1px solid #2f2f2f;
+            display: none; flex-direction: column; flex-shrink: 0;
+        }
+        .sidebar-header {
+            padding: 15px; border-bottom: 1px solid #2f2f2f; font-size: 0.85rem; font-weight: 600;
+            color: #ececec; display: flex; justify-content: space-between; align-items: center;
+        }
+        #conv-list {
+            flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 6px;
+        }
+        .conv-item {
+            padding: 12px; border-radius: 10px; background: #212121; cursor: pointer;
+            border: 1px solid transparent; transition: 0.15s; display: flex; align-items: center; gap: 10px;
+        }
+        .conv-item:hover { background: #2a2a2a; }
+        .conv-item.active { background: #2f2f2f; border-color: #10a37f; }
+        .conv-avatar {
+            width: 36px; height: 36px; border-radius: 50%; background: #444;
+            display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0; color: #ddd;
+        }
+        .conv-info { display: flex; flex-direction: column; gap: 3px; overflow: hidden; flex: 1; }
+        .conv-title {
+            font-size: 0.9rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+            display: flex; align-items: center; gap: 6px;
+        }
+        .conv-sub {
+            font-size: 0.8rem; color: #9b9b9b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .unread-dot { width: 10px; height: 10px; background: #10a37f; border-radius: 50%; flex-shrink: 0; }
+        .online-dot { width: 8px; height: 8px; background: #10a37f; border-radius: 50%; display: inline-block; flex-shrink: 0; }
+
+        /* ZONE PRINCIPALE */
+        #main-area { flex: 1; display: flex; flex-direction: column; height: 100vh; position: relative; min-width: 0; }
+        header {
+            padding: 15px 20px; display: flex; justify-content: space-between; align-items: center;
+            background: #212121; border-bottom: 1px solid #2a2a2a;
+        }
+        .model-name { font-weight: 600; font-size: 1.1rem; color: #ececec; display: flex; align-items: center; gap: 10px; }
+        .badge-admin { background: #e11d48; color: white; font-size: 0.7rem; padding: 3px 8px; border-radius: 99px; display: none; }
+        
+        .header-right { display: flex; align-items: center; gap: 10px; }
+        #api-key-btn {
+            display: none; background: #2f2f2f; color: #ececec; border: 1px solid #10a37f;
+            padding: 6px 12px; border-radius: 8px; font-size: 0.82rem; font-weight: 600; cursor: pointer; transition: 0.15s;
+        }
+        #api-key-btn:hover { background: #3a3a3a; }
+
+        #secret-toggle-btn {
+            background: transparent; color: #555; border: none; font-size: 0.9rem;
+            cursor: pointer; padding: 4px 6px; border-radius: 6px; opacity: 0.4; transition: 0.2s;
+        }
+        #secret-toggle-btn:hover { opacity: 1; color: #fff; background: #2f2f2f; }
+
+        #chat-container {
+            flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 22px;
+            max-width: 780px; width: 100%; margin: 0 auto;
+        }
+
+        .message { display: flex; gap: 15px; line-height: 1.6; font-size: 1rem; animation: fadeIn 0.2s ease; }
+        .message.user { justify-content: flex-end; }
+        .message.user .bubble { background: #2f2f2f; padding: 11px 18px; border-radius: 20px; max-width: 75%; white-space: pre-wrap; }
+        .message.ai { align-items: flex-start; }
+        .ai-avatar {
+            width: 30px; height: 30px; border-radius: 50%; background: #10a37f; display: flex;
+            align-items: center; justify-content: center; flex-shrink: 0; font-weight: bold; font-size: 0.75rem; color: white;
+        }
+        .ai-text { padding-top: 3px; max-width: 85%; white-space: pre-wrap; }
+
+        /* Indicateur de frappe */
+        #typing-indicator {
+            display: none; align-items: center; gap: 10px; max-width: 780px; width: 100%; margin: 0 auto 10px; padding: 0 20px;
+            color: #9b9b9b; font-size: 0.9rem;
+        }
+        .dots span {
+            display: inline-block; width: 6px; height: 6px; background: #10a37f; border-radius: 50%;
+            animation: bounce 1.4s infinite ease-in-out both;
+        }
+        .dots span:nth-child(1) { animation-delay: -0.32s; }
+        .dots span:nth-child(2) { animation-delay: -0.16s; }
+
+        /* Zone de saisie */
+        #input-area { padding: 10px 20px 22px; max-width: 780px; width: 100%; margin: 0 auto; }
+        .input-box {
+            background: #2f2f2f; border-radius: 24px; padding: 10px 15px; display: flex; align-items: flex-end; gap: 10px;
+            border: 1px solid #424242;
+        }
+        textarea {
+            flex: 1; background: transparent; border: none; color: white; resize: none;
+            font-size: 1rem; max-height: 150px; outline: none; padding: 4px; line-height: 1.4;
+        }
+        
+        /* Bouton Gemini (uniquement visible en mode Admin) */
+        #gemini-btn {
+            display: none; background: linear-gradient(135deg, #4285f4, #9b72cb); color: white;
+            border: none; padding: 7px 13px; border-radius: 16px; font-size: 0.82rem; font-weight: 600;
+            cursor: pointer; flex-shrink: 0; align-items: center; gap: 5px; transition: opacity 0.2s;
+        }
+        #gemini-btn:hover { opacity: 0.9; }
+        #gemini-btn:disabled { opacity: 0.5; cursor: wait; }
+
+        #send-btn {
+            background: white; color: black; border: none; width: 32px; height: 32px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; font-weight: bold;
+        }
+        .disclaimer { text-align: center; font-size: 0.72rem; color: #8e8ea0; margin-top: 8px; }
+
+        @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+    <!-- LISTE DES CONVERSATIONS (ADMIN) -->
+    <aside id="sidebar">
+        <div class="sidebar-header">
+            <span>Chats actifs</span>
+            <span id="sidebar-counter" style="background:#2f2f2f; padding:2px 8px; border-radius:10px;">0</span>
+        </div>
+        <div id="conv-list">
+            <div style="color:#777; font-size:0.82rem; text-align:center; margin-top:25px;">
+                En attente qu'un inconnu ouvre le lien...
+            </div>
+        </div>
+    </aside>
+
+    <!-- INTERFACE PRINCIPALE -->
+    <div id="main-area">
+        <header>
+            <div class="model-name">
+                ChatGPT 4o
+                <span class="badge-admin" id="admin-badge">MOI</span>
+            </div>
+            <div class="header-right">
+                <div id="active-target-label" style="font-size:0.85rem; color:#9b9b9b;"></div>
+                <button id="api-key-btn" onclick="configureGeminiKey()">🔑 Clé API Gemini</button>
+                <button id="secret-toggle-btn" onclick="toggleAdminMode()" title="Activer/Désactiver le mode contrôle (Ctrl+Shift+A)">⚙️</button>
+            </div>
+        </header>
+
+        <div id="chat-container">
+            <div id="welcome-msg" style="text-align: center; margin-top: 25vh; color: #ececec;">
+                <h2 style="font-size: 1.6rem;">Comment puis-je vous aider aujourd'hui ?</h2>
+            </div>
+        </div>
+
+        <div id="typing-indicator">
+            <div class="ai-avatar">AI</div>
+            <div class="dots"><span></span><span></span><span></span></div>
+        </div>
+
+        <div id="input-area">
+            <div class="input-box">
+                <textarea id="msg-input" rows="1" placeholder="Envoyer un message à ChatGPT..."></textarea>
+                <button id="gemini-btn" onclick="askGeminiSuggestion()" title="Générer une idée de réponse avec Gemini">✨ Aide Gemini</button>
+                <button id="send-btn" onclick="sendMessage()">▲</button>
+            </div>
+            <div class="disclaimer" id="footer-disclaimer">ChatGPT peut faire des erreurs. Envisagez de vérifier les informations importantes.</div>
+        </div>
+    </div>
+
+    <script>
+        const ADMIN_MASTER_ID = "serveur-chatgpt-piege-99482";
+
+        const urlParams = new URLSearchParams(window.location.search);
+        let isAdmin = urlParams.get('admin') === '1';
+
+        let peer = null;
+        let typingTimeout = null;
+        let adminConn = null;
+
+        let chats = {};
+        let selectedChatId = null;
+        let userCounter = 1;
+
+        const chatContainer = document.getElementById('chat-container');
+        const msgInput = document.getElementById('msg-input');
+        const typingIndicator = document.getElementById('typing-indicator');
+
+        // Raccourci clavier secret Ctrl + Shift + A pour basculer en mode Admin
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'a') {
+                e.preventDefault();
+                toggleAdminMode();
+            }
+        });
+
+        function toggleAdminMode() {
+            isAdmin = !isAdmin;
+            const url = new URL(window.location);
+            if (isAdmin) {
+                url.searchParams.set('admin', '1');
+            } else {
+                url.searchParams.delete('admin');
+            }
+            window.history.replaceState({}, '', url);
+
+            if (peer) {
+                peer.destroy();
+                peer = null;
+            }
+            chats = {};
+            selectedChatId = null;
+            chatContainer.innerHTML = `<div id="welcome-msg" style="text-align: center; margin-top: 25vh; color: #ececec;"><h2 style="font-size: 1.6rem;">Comment puis-je vous aider aujourd'hui ?</h2></div>`;
+            document.getElementById('active-target-label').innerText = '';
+
+            if (isAdmin) {
+                initAdminMode();
+            } else {
+                resetToVisitorUI();
+                initVisitorMode();
+            }
+        }
+
+        function resetToVisitorUI() {
+            document.getElementById('sidebar').style.display = 'none';
+            document.getElementById('admin-badge').style.display = 'none';
+            document.getElementById('gemini-btn').style.display = 'none';
+            document.getElementById('api-key-btn').style.display = 'none';
+            document.getElementById('footer-disclaimer').innerText = "ChatGPT peut faire des erreurs. Envisagez de vérifier les informations importantes.";
+            msgInput.placeholder = "Envoyer un message à ChatGPT...";
+        }
+
+        if (isAdmin) {
+            initAdminMode();
+        } else {
+            initVisitorMode();
+        }
+
+        // ==========================================
+        // 1. INTERFACE ADMIN (TOI)
+        // ==========================================
+        function initAdminMode() {
+            document.getElementById('sidebar').style.display = 'flex';
+            document.getElementById('admin-badge').style.display = 'inline-block';
+            document.getElementById('gemini-btn').style.display = 'flex';
+            document.getElementById('api-key-btn').style.display = 'inline-block';
+            updateApiKeyButtonStatus();
+
+            document.getElementById('footer-disclaimer').innerText = "Mode Admin actif — Clique sur ✨ Aide Gemini si tu ne sais pas quoi répondre.";
+            msgInput.placeholder = "Sélectionne un inconnu à gauche pour lui répondre...";
+            document.getElementById('welcome-msg').innerHTML = "<h2 style='font-size:1.3rem; color:#888;'>En attente qu'un inconnu ouvre le lien...</h2>";
+
+            peer = new Peer(ADMIN_MASTER_ID);
+
+            peer.on('error', (err) => {
+                if (err.type === 'unavailable-id') {
+                    alert("Attention : Tu as déjà un onglet Admin ouvert !");
+                }
+            });
+
+            peer.on('connection', (conn) => {
+                const id = conn.peer;
+                const name = "Inconnu #" + userCounter++;
+
+                chats[id] = {
+                    conn: conn,
+                    name: name,
+                    messages: [],
+                    unread: true,
+                    isTyping: false
+                };
+
+                renderSidebar();
+
+                if (!selectedChatId) {
+                    selectChat(id);
+                }
+
+                conn.on('data', (data) => {
+                    if (data.type === 'chat') {
+                        chats[id].messages.push({ sender: 'user', text: data.text });
+                        chats[id].isTyping = false;
+
+                        if (selectedChatId === id) {
+                            renderChat(id);
+                        } else {
+                            chats[id].unread = true;
+                        }
+                        renderSidebar();
+                    } else if (data.type === 'typing') {
+                        chats[id].isTyping = data.isTyping;
+                        renderSidebar();
+                    }
+                });
+
+                conn.on('close', () => {
+                    delete chats[id];
+                    if (selectedChatId === id) {
+                        selectedChatId = null;
+                        document.getElementById('active-target-label').innerText = "";
+                        chatContainer.innerHTML = "<div style='text-align:center; margin-top:25vh; color:#777;'>L'inconnu a quitté la page.</div>";
+                    }
+                    renderSidebar();
+                });
+            });
+        }
+
+        // ==========================================
+        // INTÉGRATION GEMINI
+        // ==========================================
+        function configureGeminiKey() {
+            const currentKey = localStorage.getItem('gemini_api_key') || '';
+            const newKey = prompt("Colle ta clé API Google Gemini (Google AI Studio) :", currentKey);
+            if (newKey !== null) {
+                localStorage.setItem('gemini_api_key', newKey.trim());
+                updateApiKeyButtonStatus();
+            }
+        }
+
+        function updateApiKeyButtonStatus() {
+            const btn = document.getElementById('api-key-btn');
+            const hasKey = !!(localStorage.getItem('gemini_api_key') || '').trim();
+            btn.innerText = hasKey ? "🔑 Clé Gemini OK" : "🔑 Configurer Clé Gemini";
+            btn.style.borderColor = hasKey ? "#10a37f" : "#ef4444";
+        }
+
+        async function askGeminiSuggestion() {
+            if (!selectedChatId || !chats[selectedChatId]) {
+                return alert("Sélectionne d'abord une conversation à gauche !");
+            }
+
+            let apiKey = (localStorage.getItem('gemini_api_key') || '').trim();
+            if (!apiKey) {
+                configureGeminiKey();
+                apiKey = (localStorage.getItem('gemini_api_key') || '').trim();
+                if (!apiKey) return;
+            }
+
+            const currentChat = chats[selectedChatId];
+            if (currentChat.messages.length === 0) {
+                return alert("Attends que l'inconnu envoie au moins un message !");
+            }
+
+            const geminiBtn = document.getElementById('gemini-btn');
+            geminiBtn.disabled = true;
+            geminiBtn.innerText = "⏳ Gemini...";
+
+            const conversationHistory = currentChat.messages.map(m =>
+                `${m.sender === 'user' ? 'Utilisateur' : 'Toi (ChatGPT)'}: ${m.text}`
+            ).join('\n');
+
+            const promptText = `Tu m'aides à répondre dans un chat où l'utilisateur pense parler à ChatGPT, mais c'est moi qui écris manuellement.
+Génère une réponse crédible, naturelle et pertinente en français (dans le style de ChatGPT, 2 à 4 phrases max) pour continuer cette conversation.
+Ne mets pas de guillemets ni de préambule, donne uniquement le texte exact à envoyer.
+
+Historique de la discussion :
+${conversationHistory}`;
+
+            try {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: promptText }] }]
+                    })
+                });
+
+                const data = await response.json();
+                if (data.error) {
+                    throw new Error(data.error.message);
+                }
+
+                const suggestion = data.candidates[0].content.parts[0].text.trim();
+                msgInput.value = suggestion;
+                msgInput.dispatchEvent(new Event('input'));
+                msgInput.focus();
+            } catch (error) {
+                alert("Erreur Gemini : " + error.message);
+            } finally {
+                geminiBtn.disabled = false;
+                geminiBtn.innerText = "✨ Aide Gemini";
+            }
+        }
+
+        function renderSidebar() {
+            const list = document.getElementById('conv-list');
+            const keys = Object.keys(chats);
+            document.getElementById('sidebar-counter').innerText = keys.length;
+
+            if (keys.length === 0) {
+                list.innerHTML = `<div style="color:#777; font-size:0.82rem; text-align:center; margin-top:25px;">En attente qu'un inconnu ouvre le lien...</div>`;
+                return;
+            }
+
+            list.innerHTML = '';
+            keys.slice().reverse().forEach(id => {
+                const c = chats[id];
+                const lastMsg = c.messages.length > 0 ? c.messages[c.messages.length - 1].text : "Vient d'ouvrir la page";
+                const subText = c.isTyping ? "✍️ En train d'écrire..." : lastMsg;
+
+                const item = document.createElement('div');
+                item.className = `conv-item ${selectedChatId === id ? 'active' : ''}`;
+                item.onclick = () => selectChat(id);
+
+                item.innerHTML = `
+                    <div class="conv-avatar">?</div>
+                    <div class="conv-info">
+                        <div class="conv-title"><span class="online-dot"></span> ${c.name}</div>
+                        <div class="conv-sub" style="${c.isTyping ? 'color:#10a37f; font-weight:bold;' : ''}">${escapeHtml(subText)}</div>
+                    </div>
+                    ${c.unread ? '<div class="unread-dot"></div>' : ''}
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        function selectChat(id) {
+            selectedChatId = id;
+            chats[id].unread = false;
+            document.getElementById('active-target-label').innerText = `Cible : ${chats[id].name}`;
+            msgInput.placeholder = `Répondre à ${chats[id].name}...`;
+            renderSidebar();
+            renderChat(id);
+        }
+
+        function renderChat(id) {
+            const c = chats[id];
+            chatContainer.innerHTML = '';
+            if (c.messages.length === 0) {
+                chatContainer.innerHTML = `<div style="text-align:center; margin-top:25vh; color:#777;">${c.name} est connecté. Attends son message...</div>`;
+                return;
+            }
+            c.messages.forEach(m => appendMessageDOM(m.sender, m.text));
+        }
+
+        // ==========================================
+        // 2. INTERFACE VISITEUR
+        // ==========================================
+        function initVisitorMode() {
+            peer = new Peer();
+            peer.on('open', () => {
+                adminConn = peer.connect(ADMIN_MASTER_ID);
+
+                adminConn.on('data', (data) => {
+                    const welcome = document.getElementById('welcome-msg');
+                    if (welcome) welcome.style.display = 'none';
+                    if (data.type === 'chat') {
+                        typingIndicator.style.display = 'none';
+                        appendAIMessageStream(data.text);
+                    } else if (data.type === 'typing') {
+                        typingIndicator.style.display = data.isTyping ? 'flex' : 'none';
+                        chatContainer.scrollTop = chatContainer.scrollHeight;
+                    }
+                });
+            });
+        }
+
+        // ==========================================
+        // 3. ENVOI DES MESSAGES
+        // ==========================================
+        function sendMessage() {
+            const text = msgInput.value.trim();
+            if (!text) return;
+
+            if (isAdmin) {
+                if (!selectedChatId || !chats[selectedChatId]) {
+                    return alert("Clique sur une conversation à gauche avant d'envoyer !");
+                }
+                const target = chats[selectedChatId];
+                target.messages.push({ sender: 'ai', text: text });
+                renderChat(selectedChatId);
+                renderSidebar();
+
+                target.conn.send({ type: 'chat', text: text });
+                target.conn.send({ type: 'typing', isTyping: false });
+            } else {
+                const welcome = document.getElementById('welcome-msg');
+                if (welcome) welcome.style.display = 'none';
+
+                appendMessageDOM('user', text);
+
+                if (adminConn && adminConn.open) {
+                    adminConn.send({ type: 'chat', text: text });
+                    adminConn.send({ type: 'typing', isTyping: false });
+                }
+            }
+
+            msgInput.value = '';
+            msgInput.style.height = 'auto';
+        }
+
+        msgInput.addEventListener('input', () => {
+            msgInput.style.height = 'auto';
+            msgInput.style.height = msgInput.scrollHeight + 'px';
+
+            const activeConn = isAdmin ? (selectedChatId && chats[selectedChatId]?.conn) : adminConn;
+
+            if (activeConn && activeConn.open) {
+                activeConn.send({ type: 'typing', isTyping: true });
+                clearTimeout(typingTimeout);
+                typingTimeout = setTimeout(() => {
+                    activeConn.send({ type: 'typing', isTyping: false });
+                }, 1500);
+            }
+        });
+
+        msgInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        function appendMessageDOM(sender, text) {
+            const div = document.createElement('div');
+            div.className = `message ${sender}`;
+            if (sender === 'user') {
+                div.innerHTML = `<div class="bubble">${escapeHtml(text)}</div>`;
+            } else {
+                div.innerHTML = `<div class="ai-avatar">AI</div><div class="ai-text">${escapeHtml(text)}</div>`;
+            }
+            chatContainer.appendChild(div);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function appendAIMessageStream(fullText) {
+            const div = document.createElement('div');
+            div.className = 'message ai';
+            const textContainer = document.createElement('div');
+            textContainer.className = 'ai-text';
+            div.innerHTML = `<div class="ai-avatar">AI</div>`;
+            div.appendChild(textContainer);
+            chatContainer.appendChild(div);
+
+            const words = fullText.split(' ');
+            let i = 0;
+            const interval = setInterval(() => {
+                if (i < words.length) {
+                    textContainer.textContent += (i === 0 ? '' : ' ') + words[i];
+                    chatContainer.scrollTop = chatContainer.scrollHeight;
+                    i++;
+                } else {
+                    clearInterval(interval);
+                }
+            }, 55);
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>
